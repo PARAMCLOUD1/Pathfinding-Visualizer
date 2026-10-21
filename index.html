@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pathfinding Visualizer</title>
+<style>
+:root{
+  --bg:#eef1f5;--panel:#ffffff;--ink:#14213d;--muted:#5c6b82;--line:#d5dce6;
+  --cell:#f7f9fc;--grid:#e1e7ef;--wall:#14213d;--wt:#b9a37a;--vis:#8fb8e8;--vis2:#4f86c6;--path:#f2a541;--st:#2a9d8f;--en:#e4572e;
+  --btn:#14213d;--btnink:#ffffff;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1624;--panel:#18223a;--ink:#e8edf6;--muted:#9aa8c0;--line:#2a3856;
+  --cell:#121b2e;--grid:#222f4a;--wall:#cfd8e8;--wt:#8a7650;--vis:#2d5a8e;--vis2:#5b93d4;--path:#f2b45a;--st:#46c2b2;--en:#ff7a59;
+  --btn:#e8edf6;--btnink:#0f1624;}}
+:root[data-theme="dark"]{
+  --bg:#0f1624;--panel:#18223a;--ink:#e8edf6;--muted:#9aa8c0;--line:#2a3856;
+  --cell:#121b2e;--grid:#222f4a;--wall:#cfd8e8;--wt:#8a7650;--vis:#2d5a8e;--vis2:#5b93d4;--path:#f2b45a;--st:#46c2b2;--en:#ff7a59;
+  --btn:#e8edf6;--btnink:#0f1624;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1020px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.5rem;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:1.05rem;margin:20px 0 8px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted)}
+select,input[type=range]{width:100%;font:inherit;color:var(--ink)}
+select{padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--btn);background:var(--btn);color:var(--btnink);cursor:pointer}
+button.alt{background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--path);outline-offset:2px}
+canvas{width:100%;display:block;border-radius:6px;touch-action:none;cursor:crosshair}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;font-size:.85rem;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:1.3rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.8rem;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.9rem}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600}
+tr.on td{background:color-mix(in srgb,var(--path) 18%,transparent);font-weight:600}
+.note{color:var(--muted);font-size:.9rem;margin:8px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Pathfinding Visualizer</h1>
+  <p class="sub">Draw walls on the grid, then watch an algorithm search for the shortest route from the green start to the red target.</p>
+
+  <div class="panel">
+    <div class="controls">
+      <label>Algorithm <select id="algo"></select></label>
+      <label>Draw tool
+        <select id="tool">
+          <option value="wall">Wall (blocked)</option>
+          <option value="weight">Weight (cost 5)</option>
+          <option value="erase">Eraser</option>
+        </select>
+      </label>
+      <label>Speed: <span id="sv">60</span>
+        <input id="speed" type="range" min="1" max="100" value="60">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="go">Find path</button>
+      <button id="clrpath" class="alt">Clear path</button>
+      <button id="clrall" class="alt">Clear board</button>
+      <button id="rnd" class="alt">Random walls</button>
+      <button id="maze" class="alt">Generate maze</button>
+      <button id="cmp" class="alt">Compare all</button>
+    </div>
+    <canvas id="cv" role="img" aria-label="Grid for drawing walls and showing the searched path"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--st)"></i>Start (drag to move)</span>
+      <span><i style="background:var(--en)"></i>Target (drag to move)</span>
+      <span><i style="background:var(--wall)"></i>Wall</span>
+      <span><i style="background:var(--wt)"></i>Weight (cost 5)</span>
+      <span><i style="background:var(--vis)"></i>Visited</span>
+      <span><i style="background:var(--path)"></i>Shortest path found</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="s1">0</b><span>Cells visited</span></div>
+    <div class="stat"><b id="s2">0</b><span>Path length (cells)</span></div>
+    <div class="stat"><b id="s3">0</b><span>Path cost</span></div>
+    <div class="stat"><b id="s4">0 ms</b><span>Compute time</span></div>
+    <div class="stat"><b id="s5">Ready</b><span>Status</span></div>
+  </div>
+
+  <h2>Compare all on this board</h2>
+  <div class="panel tablewrap">
+    <table>
+      <thead><tr><th>Algorithm</th><th>Visited</th><th>Path length</th><th>Path cost</th><th>Time (ms)</th></tr></thead>
+      <tbody id="cres"><tr><td colspan="5" style="color:var(--muted)">Press “Compare all” to run every algorithm on the current board.</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Complexity and behaviour</h2>
+  <div class="panel tablewrap">
+    <table>
+      <thead><tr><th>Algorithm</th><th>Time</th><th>Shortest path?</th><th>Uses weights?</th></tr></thead>
+      <tbody id="ctab"></tbody>
+    </table>
+  </div>
+  <p class="note">V = number of cells, E = number of moves between neighbouring cells. Try a maze first, then add weights, and see how the choice of algorithm changes the path.</p>
+</main>
+
+<script>
+"use strict";
+var R=21,C=37,N=R*C;
+var grid=[],S=[1,1],E=[R-2,C-2],vis=new Uint8Array(N),path=[];
+var running=false,timer=null,gen=null,drag=null,paintTo=0,tspent=0,visited=0,last=null;
+
+var INFO={
+  bfs:{name:"Breadth-first search",time:"O(V + E)",short:"Yes (equal costs only)",w:"No"},
+  dfs:{name:"Depth-first search",time:"O(V + E)",short:"No",w:"No"},
+  dijkstra:{name:"Dijkstra",time:"O((V + E) log V)",short:"Yes",w:"Yes"},
+  greedy:{name:"Greedy best-first",time:"O((V + E) log V)",short:"No",w:"Yes (only to price the path)"}
+};
+
+function Heap(){this.a=[];this.n=0;}
+Heap.prototype.push=function(k,v){var a=this.a,i=a.length;a.push([k,this.n++,v]);
+  while(i>0){var p=(i-1)>>1;if(lt(a[i],a[p])){var t=a[i];a[i]=a[p];a[p]=t;i=p;}else break;}};
+Heap.prototype.pop=function(){var a=this.a,top=a[0],x=a.pop();
+  if(a.length){a[0]=x;var i=0,n=a.length;
+    while(true){var l=2*i+1,r=l+1,m=i;
+      if(l<n&&lt(a[l],a[m]))m=l;if(r<n&&lt(a[r],a[m]))m=r;if(m===i)break;
+      var t=a[i];a[i]=a[m];a[m]=t;i=m;}}
+  return top;};
+function lt(x,y){return x[0]<y[0]||(x[0]===y[0]&&x[1]<y[1]);}
+
+function idx(r,c){return r*C+c;}
+function cost(i){return grid[(i/C)|0][i%C]===5?5:1;}
+function wall(i){return grid[(i/C)|0][i%C]===1;}
+function nbrs(i){var r=(i/C)|0,c=i%C,o=[];
+  if(r>0&&!wall(i-C))o.push(i-C);
+  if(c<C-1&&!wall(i+1))o.push(i+1);
+  if(r<R-1&&!wall(i+C))o.push(i+C);
+  if(c>0&&!wall(i-1))o.push(i-1);
+  return o;}
+
+function* algo(name){
+  var prev=new Int32Array(N).fill(-1),dist=new Float64Array(N).fill(Infinity),seen=new Uint8Array(N);
+  var s=idx(S[0],S[1]),t=idx(E[0],E[1]),i,k,nb,list;
+  var h=function(x){return Math.abs(((x/C)|0)-E[0])+Math.abs(x%C-E[1]);};
+  if(name==="bfs"||name==="dfs"){
+    var fr=[s],head=0;seen[s]=1;
+    while(name==="bfs"?head<fr.length:fr.length){
+      i=name==="bfs"?fr[head++]:fr.pop();
+      if(name==="dfs"){if(seen[i]===2)continue;seen[i]=2;}
+      yield i;
+      if(i===t)return{found:true,prev:prev};
+      list=nbrs(i);
+      for(k=0;k<list.length;k++){nb=list[k];
+        if(name==="bfs"){if(!seen[nb]){seen[nb]=1;prev[nb]=i;fr.push(nb);}}
+        else if(seen[nb]!==2){prev[nb]=i;fr.push(nb);}}
+    }
+    return{found:false,prev:prev};
+  }
+  var hp=new Heap();dist[s]=0;hp.push(name==="greedy"?h(s):0,s);
+  while(hp.a.length){
+    i=hp.pop()[2];if(seen[i])continue;seen[i]=1;
+    yield i;
+    if(i===t)return{found:true,prev:prev};
+    list=nbrs(i);
+    for(k=0;k<list.length;k++){nb=list[k];
+      var nd=dist[i]+cost(nb);
+      if(name==="greedy"){if(!seen[nb]&&prev[nb]===-1&&nb!==s){prev[nb]=i;dist[nb]=nd;hp.push(h(nb),nb);}}
+      else if(nd<dist[nb]){dist[nb]=nd;prev[nb]=i;hp.push(name==="astar"?nd+h(nb):nd,nb);}}
+  }
+  return{found:false,prev:prev};
+}
+
+function buildPath(res){
+  var p=[],t=idx(E[0],E[1]),s=idx(S[0],S[1]),i=t,c=0;
+  if(!res.found)return{p:[],c:0};
+  while(i!==-1){p.push(i);if(i===s)break;c+=cost(i);i=res.prev[i];}
+  return{p:p.reverse(),c:c};
+}
+
+var $=function(id){return document.getElementById(id);};
+var cv=$("cv"),ctx=cv.getContext("2d");
+
+function emptyGrid(){grid=[];for(var r=0;r<R;r++)grid.push(new Uint8Array(C));}
+function clearViz(){stop();gen=null;vis.fill(0);path=[];visited=0;tspent=0;last=null;
+  setStats(0,0,0,0,"Ready");$("go").disabled=false;$("go").textContent="Find path";draw();}
+function setStats(v,l,c,t,msg){$("s1").textContent=v;$("s2").textContent=l;$("s3").textContent=c;$("s4").textContent=t.toFixed(1)+" ms";$("s5").textContent=msg;}
+
+function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function draw(){
+  var dpr=window.devicePixelRatio||1,w=cv.clientWidth,cs=w/C,h=cs*R;
+  cv.style.height=h+"px";
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  var cCell=col("--cell"),cGrid=col("--grid"),cWall=col("--wall"),cWt=col("--wt"),cVis=col("--vis"),cPath=col("--path"),cSt=col("--st"),cEn=col("--en"),r,c,i,v;
+  ctx.fillStyle=cCell;ctx.fillRect(0,0,w,h);
+  var onp=new Uint8Array(N);for(i=0;i<path.length;i++)onp[path[i]]=1;
+  for(r=0;r<R;r++)for(c=0;c<C;c++){
+    i=idx(r,c);v=grid[r][c];var f=null;
+    if(v===1)f=cWall;else if(onp[i])f=cPath;else if(vis[i])f=cVis;else if(v===5)f=cWt;
+    if(f){ctx.fillStyle=f;ctx.fillRect(c*cs,r*cs,cs,cs);}
+    if(v===5&&!onp[i]&&!vis[i]){ctx.fillStyle=cWall;ctx.globalAlpha=.55;ctx.fillRect(c*cs+cs*.3,r*cs+cs*.3,cs*.4,cs*.4);ctx.globalAlpha=1;}
+    else if(v===5){ctx.fillStyle=cWt;ctx.fillRect(c*cs+cs*.3,r*cs+cs*.3,cs*.4,cs*.4);}
+  }
+  ctx.strokeStyle=cGrid;ctx.lineWidth=1;ctx.beginPath();
+  for(r=0;r<=R;r++){ctx.moveTo(0,r*cs+.5);ctx.lineTo(w,r*cs+.5);}
+  for(c=0;c<=C;c++){ctx.moveTo(c*cs+.5,0);ctx.lineTo(c*cs+.5,h);}
+  ctx.stroke();
+  ctx.fillStyle=cSt;ctx.fillRect(S[1]*cs+1,S[0]*cs+1,cs-1,cs-1);
+  ctx.fillStyle=cEn;ctx.fillRect(E[1]*cs+1,E[0]*cs+1,cs-1,cs-1);
+}
+
+function step(){
+  var t0=performance.now(),per=Math.max(1,Math.ceil(($("speed").value-50)/3)),k,r;
+  for(k=0;k<per;k++){
+    r=gen.next();
+    if(r.done){tspent+=performance.now()-t0;finish(r.value);return;}
+    vis[r.value]=1;visited++;
+  }
+  tspent+=performance.now()-t0;
+  setStats(visited,0,0,tspent,"Searching…");draw();
+  timer=setTimeout(step,Math.max(4,Math.round(400/$("speed").value)));
+}
+function finish(res){
+  var b=buildPath(res);path=b.p;running=false;gen=null;
+  setStats(visited,path.length,b.c,tspent,res.found?"Path found":"No path");
+  $("go").disabled=false;$("go").textContent="Find path";draw();
+}
+function stop(){running=false;clearTimeout(timer);}
+function start(){
+  clearViz();running=true;gen=algo($("algo").value);$("go").textContent="Stop";
+  setStats(0,0,0,0,"Searching…");step();
+}
+
+function runSync(name){
+  var g=algo(name),v=0,r,t0=performance.now(),seen=new Uint8Array(N);
+  while(true){r=g.next();if(r.done)break;v++;}
+  var ms=performance.now()-t0,b=buildPath(r.value);
+  return{v:v,l:b.p.length,c:b.c,ms:ms,found:r.value.found};
+}
+
+function randomWalls(){
+  emptyGrid();
+  for(var r=0;r<R;r++)for(var c=0;c<C;c++)if(Math.random()<.28)grid[r][c]=1;
+  grid[S[0]][S[1]]=0;grid[E[0]][E[1]]=0;clearViz();
+}
+function makeMaze(){
+  var r,c;grid=[];for(r=0;r<R;r++){var row=new Uint8Array(C).fill(1);grid.push(row);}
+  var st=[[1,1]];grid[1][1]=0;
+  while(st.length){
+    var cur=st[st.length-1],d=[[0,2],[2,0],[0,-2],[-2,0]].sort(function(){return Math.random()-.5;}),moved=false;
+    for(var k=0;k<4;k++){
+      var nr=cur[0]+d[k][0],nc=cur[1]+d[k][1];
+      if(nr>0&&nr<R-1&&nc>0&&nc<C-1&&grid[nr][nc]===1){
+        grid[cur[0]+d[k][0]/2][cur[1]+d[k][1]/2]=0;grid[nr][nc]=0;st.push([nr,nc]);moved=true;break;}}
+    if(!moved)st.pop();
+  }
+  S=[1,1];E=[R-2,C-2];grid[S[0]][S[1]]=0;grid[E[0]][E[1]]=0;clearViz();
+}
+
+function cellAt(ev){
+  var b=cv.getBoundingClientRect(),cs=b.width/C,
+      c=Math.floor((ev.clientX-b.left)/cs),r=Math.floor((ev.clientY-b.top)/cs);
+  if(r<0||c<0||r>=R||c>=C)return null;return[r,c];
+}
+function apply(p){
+  if(!p)return;
+  if(drag==="S"||drag==="E"){
+    if(grid[p[0]][p[1]]===1)return;
+    var o=drag==="S"?E:S;if(o[0]===p[0]&&o[1]===p[1])return;
+    if(drag==="S")S=p;else E=p;
+  }else{
+    if((p[0]===S[0]&&p[1]===S[1])||(p[0]===E[0]&&p[1]===E[1]))return;
+    grid[p[0]][p[1]]=paintTo;
+  }
+  vis.fill(0);path=[];visited=0;draw();
+}
+cv.addEventListener("pointerdown",function(ev){
+  if(running)return;var p=cellAt(ev);if(!p)return;
+  cv.setPointerCapture(ev.pointerId);
+  if(p[0]===S[0]&&p[1]===S[1])drag="S";
+  else if(p[0]===E[0]&&p[1]===E[1])drag="E";
+  else{drag="P";var t=$("tool").value;paintTo=t==="wall"?1:t==="weight"?5:0;}
+  apply(p);
+});
+cv.addEventListener("pointermove",function(ev){if(drag)apply(cellAt(ev));});
+function up(){if(drag){drag=null;setStats(0,0,0,0,"Ready");}}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+
+(function init(){
+  var tb="",k;
+  for(k in INFO){
+    $("algo").insertAdjacentHTML("beforeend",'<option value="'+k+'">'+INFO[k].name+'</option>');
+    if(k!=="astar")tb+="<tr><td>"+INFO[k].name+"</td><td>"+INFO[k].time+"</td><td>"+INFO[k].short+"</td><td>"+INFO[k].w+"</td></tr>";
+  }
+  $("ctab").innerHTML=tb;
+  $("algo").value="dijkstra";
+  emptyGrid();
+  $("go").onclick=function(){if(running){clearViz();}else start();};
+  $("clrpath").onclick=function(){clearViz();};
+  $("clrall").onclick=function(){emptyGrid();S=[1,1];E=[R-2,C-2];clearViz();};
+  $("rnd").onclick=randomWalls;$("maze").onclick=makeMaze;
+  $("algo").onchange=clearViz;
+  $("speed").oninput=function(){$("sv").textContent=this.value;};
+  $("cmp").onclick=function(){
+    clearViz();var h="",k;
+    for(k in INFO){var r=runSync(k);
+      h+="<tr><td>"+INFO[k].name+"</td><td>"+r.v+"</td><td>"+(r.found?r.l:"No path")+"</td><td>"+(r.found?r.c:"-")+"</td><td>"+r.ms.toFixed(2)+"</td></tr>";}
+    $("cres").innerHTML=h;
+  };
+  window.addEventListener("resize",draw);
+  if(window.matchMedia)window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
+  makeMaze();
+})();
+</script>
+</body>
+</html>
